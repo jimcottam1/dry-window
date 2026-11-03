@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en-IE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dry Window</title>
+<meta name="description" content="The best dry windows this week for washing, mowing, cycling and more, for towns across Ireland.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the windows</a>
+<header class="top">
+  <div class="wrap top-in">
+    <h1 class="brand"><span class="mark" aria-hidden="true"></span>Dry Window</h1>
+    <label class="town">
+      <span class="sr">Choose your town</span>
+      <select id="town" aria-label="Choose your town"><option>Limerick</option></select>
+    </label>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+  <p class="draft" id="draft">Sketch: sample figures, not a real forecast.</p>
+
+  <section id="warnings" aria-label="Met Éireann weather warnings" class="warnings"></section>
+
+  <section aria-labelledby="act-h">
+    <h2 id="act-h" class="sr">What do you want to do?</h2>
+    <div id="activities" class="chips" role="tablist" aria-label="Activity"></div>
+  </section>
+
+  <section aria-labelledby="best-h" class="best">
+    <h2 id="best-h" class="best-h"></h2>
+    <p class="tag" id="tag"></p>
+    <ol id="windows" class="windows"></ol>
+    <p id="wait" class="wait" hidden></p>
+    <button id="share" class="share" type="button">Share this window</button>
+  </section>
+
+  <section aria-labelledby="week-h" class="week">
+    <h2 id="week-h">The week at a glance</h2>
+    <div id="strip" class="strip" role="img" aria-label="Hour by hour: blue is rain, gold is dry. Your window is outlined."></div>
+    <ul class="key">
+      <li><i class="k dry"></i>Dry</li><li><i class="k light"></i>Light rain</li><li><i class="k wet"></i>Rain</li><li><i class="k win"></i>Your window</li>
+    </ul>
+    <p class="sun" id="sun"></p>
+  </section>
+</main>
+
+<footer class="foot wrap">
+  <p><strong>Forecast and warnings:</strong> Met Éireann, licensed under CC BY 4.0 with its open data conditions. Forecasts change; always check the warnings.</p>
+  <p id="stamp"></p>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>
