@@ -112,5 +112,5 @@ test('windows never cross midnight Irish time', () => {
   const s = series('2026-06-20T00:00:00Z', 48);
   const r = W.findWindows(s, 'cycle', Object.assign({}, opts, { now: Date.parse('2026-06-19T22:00:00Z') }));
   assert.ok(r.windows.length > 0);
-  r.windows.forEach((w) => assert.strictEqual(W.irishParts(w.startMs).date, W.irishParts(w.endMs - 1).date));
+  r.windows.forEach((w) => w.spans.forEach((sp) => assert.strictEqual(W.irishParts(sp.startMs).date, W.irishParts(sp.endMs - 1).date)));
 });

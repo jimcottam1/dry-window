@@ -36,5 +36,21 @@
     ['wicklow', 'Wicklow', 'Wicklow', 52.98, -6.04],
     ['athlone', 'Athlone', 'Westmeath', 53.42, -7.94]
   ].map(function (t) { return { slug: t[0], name: t[1], county: t[2], lat: t[3], lon: t[4] }; });
-  return { TOWNS: TOWNS };
+  function norm(s) {
+    var t = String(s == null ? '' : s);
+    try { t = decodeURIComponent(t); } catch (e) { /* keep as is */ }
+    return t.toLowerCase().replace(/[\u0300-\u036f]/g, '').replace(/^co\.?\s+/, '').replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  // Finds a town from whatever was typed in a link: its slug or name, or a county (which gets the
+  // county's first listed town). Returns { town, how: 'exact' | 'county' } or null when unknown.
+  function resolveTown(input) {
+    var key = norm(input);
+    if (!key) return null;
+    for (var i = 0; i < TOWNS.length; i++) if (TOWNS[i].slug === key || norm(TOWNS[i].name) === key) return { town: TOWNS[i], how: 'exact' };
+    for (var j = 0; j < TOWNS.length; j++) if (norm(TOWNS[j].county) === key) return { town: TOWNS[j], how: 'county' };
+    return null;
+  }
+
+  return { TOWNS: TOWNS, resolveTown: resolveTown };
 });

@@ -21,6 +21,7 @@
 
 <main id="main" class="wrap">
   <p class="status" id="status" aria-live="polite">Loading the forecast...</p>
+  <div id="linknote" role="status"></div>
   <div id="notice"></div>
 
   <section id="warnings" aria-label="Met Éireann weather warnings" class="warnings"></section>
@@ -35,10 +36,15 @@
       <p class="tag" id="tag"></p>
       <ol id="windows" class="windows"></ol>
       <p id="wait" class="wait" hidden></p>
+      <p id="rainline" class="rainline"></p>
       <div class="actions">
         <button id="share" class="share" type="button">Share this window</button>
-        <span id="shared" class="shared" role="status"></span>
+        <span id="shared" class="shared" role="status" aria-live="polite"></span>
       </div>
+      <label id="sharebox-wrap" class="sharebox" hidden>
+        <span class="sr">Text to copy</span>
+        <textarea id="sharebox" readonly rows="3"></textarea>
+      </label>
       <details class="rules">
         <summary>How this is worked out</summary>
         <p id="rule"></p>
@@ -47,12 +53,17 @@
 
     <section class="week" aria-labelledby="week-h">
       <h2 id="week-h">The week at a glance</h2>
-      <div id="strip" class="strip"></div>
+      <p class="strip-note" id="strip-note"></p>
+      <div id="strip" class="strip" role="img" aria-label="Hour by hour forecast for the daylight hours of the next five days. The same information is in words under Day by day in words."></div>
       <ul class="key">
         <li><i class="k dry"></i>Dry</li><li><i class="k light"></i>Light rain</li><li><i class="k wet"></i>Rain</li>
         <li><i class="k kwin"></i>Your window (outlined)</li><li><i class="k night"></i>Dark</li>
       </ul>
       <p class="sun" id="sun"></p>
+      <details class="rules words">
+        <summary>Day by day in words</summary>
+        <ul id="daywords"></ul>
+      </details>
     </section>
   </section>
 </main>
@@ -67,6 +78,7 @@
 <script src="windows.js"></script>
 <script src="warnings.js"></script>
 <script src="fresh.js"></script>
+<script src="share.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -49,7 +49,7 @@
   // good = length that earns "Good". These are the visible rules shown on the page.
   var ACTIVITIES = [
     {
-      id: 'washing', name: 'Washing out', icon: '👕', min: 3, good: 5,
+      id: 'washing', name: 'Washing out', doing: 'washing out', icon: '👕', min: 3, good: 5,
       rule: 'Dry, wind under 36 km/h, in daylight, at least 3 hours.',
       ok: function (h) { return h.rain <= 0.1 && h.wind * 3.6 < 36; },
       reason: function (s, q) {
@@ -60,7 +60,7 @@
       tags: { good: 'A grand drying day', okay: 'A bit of a gamble', none: 'Not a drying day' }
     },
     {
-      id: 'mow', name: 'Mow the lawn', icon: '🌱', min: 3, good: 4, needDryBefore: 2,
+      id: 'mow', name: 'Mow the lawn', doing: 'mowing the lawn', icon: '🌱', min: 3, good: 4, needDryBefore: 2,
       rule: 'Dry, and dry for the 2 hours before, wind under 30 km/h, in daylight, at least 3 hours.',
       ok: function (h) { return h.rain <= 0.1 && h.wind * 3.6 < 30; },
       reason: function (s) {
@@ -69,7 +69,7 @@
       tags: { good: 'Mower weather', okay: 'Damp grass risk', none: 'Leave the mower' }
     },
     {
-      id: 'cycle', name: 'Cycle', icon: '🚲', min: 2, good: 3,
+      id: 'cycle', name: 'Cycle', doing: 'cycling', icon: '🚲', min: 2, good: 3,
       rule: 'Little or no rain, wind under 30 km/h, 3 degrees or warmer, in daylight, at least 2 hours.',
       ok: function (h) { return h.rain <= 0.2 && h.wind * 3.6 < 30 && h.temp >= 3; },
       reason: function (s) {
@@ -79,7 +79,7 @@
       tags: { good: 'Bikes out', okay: 'Bring a coat', none: 'Bring a coat, or stay in' }
     },
     {
-      id: 'paint', name: 'Paint the fence', icon: '🎨', min: 4, good: 6,
+      id: 'paint', name: 'Paint the fence', doing: 'painting the fence', icon: '🎨', min: 4, good: 6,
       rule: 'Dry, 8 to 25 degrees, humidity under 85%, wind under 30 km/h, in daylight, at least 4 hours.',
       ok: function (h) {
         return h.rain <= 0.1 && h.temp >= 8 && h.temp <= 25 && (h.hum == null || h.hum < 85) && h.wind * 3.6 < 30;
@@ -90,7 +90,7 @@
       tags: { good: 'Paint while it lasts', okay: 'Tight for painting', none: 'Too damp to paint' }
     },
     {
-      id: 'walk', name: 'Walk the dog', icon: '🐕', min: 2, good: 3,
+      id: 'walk', name: 'Walk the dog', doing: 'walking the dog', icon: '🐕', min: 2, good: 3,
       rule: 'Little or no rain, wind under 40 km/h, in daylight, at least 2 hours.',
       ok: function (h) { return h.rain <= 0.2 && h.wind * 3.6 < 40; },
       reason: function (s) {
@@ -102,6 +102,20 @@
 
   function byId(id) {
     for (var i = 0; i < ACTIVITIES.length; i++) if (ACTIVITIES[i].id === id) return ACTIVITIES[i];
+    return null;
+  }
+
+  // Words people might put in a link for each activity.
+  var ALIASES = {
+    washing: ['wash', 'washing', 'washing-out', 'laundry', 'clothes'],
+    mow: ['mow', 'mowing', 'mow-the-lawn', 'lawn', 'grass'],
+    cycle: ['cycle', 'cycling', 'bike', 'biking'],
+    paint: ['paint', 'painting', 'paint-the-fence', 'fence'],
+    walk: ['walk', 'walking', 'walk-the-dog', 'dog']
+  };
+  function resolveActivity(input) {
+    var key = String(input == null ? '' : input).toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
+    for (var id in ALIASES) if (ALIASES[id].indexOf(key) !== -1) return byId(id);
     return null;
   }
 
@@ -123,6 +137,32 @@
   }
 
   function mean(a) { var s = 0; for (var i = 0; i < a.length; i++) s += a[i]; return a.length ? s / a.length : 0; }
+
+  // Identical windows on following days become one ("Wed 4 to Fri 6 Nov, 08:00 to 17:00").
+  function mergeDays(list) {
+    var chron = list.slice().sort(function (a, b) { return a.startMs - b.startMs; });
+    var out = [];
+    chron.forEach(function (w) {
+      var last = out[out.length - 1];
+      var gap = last ? Math.round((Date.parse(w.date) - Date.parse(last.lastDate)) / 86400000) : 0;
+      if (last && gap === 1 && last.start === w.start && last.end === w.end && last.score === w.score) {
+        last.lastDate = w.date; last.days++; last.lastLabel = w.label;
+        last.windMin = Math.min(last.windMin, w.windMin); last.windMax = Math.max(last.windMax, w.windMax);
+        last.spans = last.spans.concat(w.spans);
+        last.endMs = w.endMs;
+      } else {
+        out.push(Object.assign({}, w, { lastDate: w.date, lastLabel: w.label, spans: w.spans.slice() }));
+      }
+    });
+    out.forEach(function (w) {
+      if (w.days > 1) {
+        var a = w.label.split(' '), b = w.lastLabel.split(' ');
+        w.label = a[0] + ' ' + a[1] + (a[2] !== b[2] ? ' ' + a[2] : '') + ' to ' + b[0] + ' ' + b[1] + ' ' + b[2];
+        w.reason += ' The same each day for ' + w.days + ' days, with wind between ' + w.windMin + ' and ' + w.windMax + ' km/h.';
+      }
+    });
+    return out;
+  }
 
   // Returns { windows: [...ranked best first], best, wait, tagKey } for one activity.
   function findWindows(series, activityId, opts) {
@@ -161,19 +201,23 @@
         var run = hrs.slice(i, j + 1);
         var q = len >= act.good ? 'good' : 'okay';
         var sp = irishParts(run[0].t);
+        var kmh = run.map(function (h) { return h.wind * 3.6; });
         var stats = {
-          hours: len, windKmh: mean(run.map(function (h) { return h.wind * 3.6; })),
+          hours: len, windKmh: mean(kmh),
           temp: mean(run.map(function (h) { return h.temp; })), sunset: light(sp.date).set
         };
         windows.push({
           date: sp.date, dow: sp.dow, label: sp.label, startMs: run[0].t, endMs: run[run.length - 1].t + HOUR,
           start: irishClock(run[0].t), end: irishClock(run[run.length - 1].t + HOUR), hours: len,
-          score: q, reason: act.reason(stats, q)
+          score: q, reason: act.reason(stats, q), windMin: Math.round(Math.min.apply(null, kmh)),
+          windMax: Math.round(Math.max.apply(null, kmh)),
+          spans: [{ startMs: run[0].t, endMs: run[run.length - 1].t + HOUR }], days: 1
         });
       }
       i = j + 1;
     }
 
+    windows = mergeDays(windows);
     windows.sort(function (a, b) {
       // Longer windows rank first; 'good' simply means long enough, so this also puts Good above Okay.
       if (a.hours !== b.hours) return b.hours - a.hours;
@@ -194,8 +238,62 @@
     return { windows: windows, best: best, wait: wait, tag: act.tags[tagKey], tagKey: tagKey };
   }
 
+  // When does rain next arrive (0.5 mm or more in an hour)? Returns a plain sentence.
+  function nextRain(series, now) {
+    var hrs = hourly(series);
+    if (!hrs.length) return null;
+    var first = Math.floor(now / HOUR) * HOUR;
+    for (var i = 0; i < hrs.length; i++) {
+      if (hrs[i].t >= first && hrs[i].rain >= 0.5) {
+        var p = irishParts(hrs[i].t);
+        return 'Rain next arrives around ' + p.label + ', ' + pad(p.hour) + ':00.';
+      }
+    }
+    var days = Math.max(1, Math.round((hrs[hrs.length - 1].t - first) / (24 * HOUR)));
+    return 'No real rain in the forecast for the next ' + days + ' days.';
+  }
+
+  function runs(list) { // [[startHour, endHourExclusive], ...] from sorted hours
+    var out = [];
+    list.forEach(function (h) {
+      var last = out[out.length - 1];
+      if (last && last[1] === h) last[1] = h + 1; else out.push([h, h + 1]);
+    });
+    return out;
+  }
+
+  // A day in words, for screen readers and for anyone who finds the coloured strip hard to read.
+  function daySummary(series, dateStr, lat, lon, now) {
+    var hrs = hourly(series), d = daylight(dateStr, lat, lon), first = Math.floor(now / HOUR) * HOUR;
+    var day = hrs.filter(function (h) {
+      return irishParts(h.t).date === dateStr && h.t >= first && h.t + HOUR / 2 >= d.rise && h.t + HOUR / 2 <= d.set;
+    });
+    if (!day.length) return null;
+    var wet = runs(day.filter(function (h) { return h.rain > 0.1; }).map(function (h) { return irishParts(h.t).hour; }));
+    var label = irishParts(day[0].t).label;
+    var rain = wet.length
+      ? 'rain around ' + wet.map(function (r) { return pad(r[0]) + ':00 to ' + pad(r[1]) + ':00'; }).join(', ')
+      : 'dry in daylight';
+    var kmh = day.map(function (h) { return h.wind * 3.6; }), temps = day.map(function (h) { return h.temp; });
+    return label + ': ' + rain + '. Wind up to ' + Math.round(Math.max.apply(null, kmh)) + ' km/h. ' +
+      Math.round(Math.min.apply(null, temps)) + ' to ' + Math.round(Math.max.apply(null, temps)) + ' degrees.';
+  }
+
+  // First and last Irish clock hour to draw in the strip: the daylight hours of the days shown.
+  function dayRange(dates, lat, lon) {
+    var lo = 24, hi = 0;
+    dates.forEach(function (ds) {
+      var d = daylight(ds, lat, lon);
+      lo = Math.min(lo, irishParts(d.rise).hour);
+      hi = Math.max(hi, irishParts(d.set).hour + 1);
+    });
+    if (lo >= hi) return [0, 24];
+    return [lo, Math.min(24, hi)];
+  }
+
   return {
-    ACTIVITIES: ACTIVITIES, byId: byId, hourly: hourly, findWindows: findWindows,
+    ACTIVITIES: ACTIVITIES, byId: byId, resolveActivity: resolveActivity, nextRain: nextRain,
+    daySummary: daySummary, dayRange: dayRange, hourly: hourly, findWindows: findWindows,
     irishParts: irishParts, irishClock: irishClock, daylight: daylight, HOUR: HOUR
   };
 });

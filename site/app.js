@@ -1,10 +1,11 @@
 // Dry Window page. Reads only the saved JSON files next to it (no live calls to anyone).
 (function () {
   'use strict';
-  var W = window.DWWindows, Wn = window.DWWarnings, F = window.DWFresh, TOWNS = window.DWTowns.TOWNS;
+  var W = window.DWWindows, Wn = window.DWWarnings, F = window.DWFresh, S = window.DWShare, T = window.DWTowns;
+  var TOWNS = T.TOWNS;
   var $ = function (id) { return document.getElementById(id); };
   var forecast = null, warnings = null, now = Date.now();
-  var state = { town: 'limerick', activity: 'washing', result: null };
+  var state = { town: 'limerick', activity: 'washing', result: null, notes: [] };
 
   function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
   function store(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode: fine */ } }
@@ -12,21 +13,47 @@
   function townBySlug(s) { return TOWNS.filter(function (t) { return t.slug === s; })[0]; }
   function when(ms) { var p = W.irishParts(ms); return p.label + ' ' + W.irishClock(ms); }
 
-  function init() {
-    var m = (location.hash || '').replace('#', '').split('/');
-    if (m[0] && townBySlug(m[0])) state.town = m[0]; else { var t = recall('dw.town'); if (t && townBySlug(t)) state.town = t; }
-    if (m[1] && W.byId(m[1])) state.activity = m[1]; else { var a = recall('dw.activity'); if (a && W.byId(a)) state.activity = a; }
+  // Town and activity come from the link first, then from what this device remembers.
+  function readLink() {
+    state.notes = [];
+    var parts = (location.hash || '').replace(/^#/, '').split('/');
+    var rememberedTown = recall('dw.town'), rememberedAct = recall('dw.activity');
+    var fallbackTown = (rememberedTown && townBySlug(rememberedTown)) ? rememberedTown : 'limerick';
+    var fallbackAct = (rememberedAct && W.byId(rememberedAct)) ? rememberedAct : 'washing';
+    state.town = fallbackTown; state.activity = fallbackAct;
+    if (parts[0]) {
+      var rt = T.resolveTown(parts[0]);
+      if (rt) {
+        state.town = rt.town.slug;
+        if (rt.how === 'county') state.notes.push('Showing ' + rt.town.name + ' for Co. ' + rt.town.county + '.');
+      } else {
+        state.notes.push('We do not have “' + decodeSafe(parts[0]) + '” in our list of towns, so here is ' + townBySlug(fallbackTown).name + ' instead. Pick yours from the list at the top.');
+      }
+    }
+    if (parts[1]) {
+      var act = W.resolveActivity(parts[1]);
+      if (act) state.activity = act.id;
+      else state.notes.push('We do not have an activity called “' + decodeSafe(parts[1]) + '”, so here is ' + W.byId(fallbackAct).name.toLowerCase() + ' instead.');
+    }
+  }
+  function decodeSafe(s) { try { return decodeURIComponent(s).slice(0, 40); } catch (e) { return String(s).slice(0, 40); } }
 
+  function init() {
+    readLink();
     $('town').innerHTML = TOWNS.map(function (t) {
       return '<option value="' + t.slug + '">' + esc(t.name) + (t.name !== t.county ? ' (Co. ' + esc(t.county) + ')' : '') + '</option>';
     }).join('');
-    $('town').value = state.town;
-    $('town').addEventListener('change', function () { state.town = this.value; save(); render(); });
+    $('town').addEventListener('change', function () { state.town = this.value; state.notes = []; save(); render(); });
     $('activities').addEventListener('click', function (e) {
       var b = e.target.closest('.chip'); if (!b) return;
-      state.activity = b.getAttribute('data-id'); save(); render();
+      state.activity = b.getAttribute('data-id'); state.notes = []; save(); render();
     });
     $('share').addEventListener('click', share);
+    window.addEventListener('hashchange', function () {
+      var wanted = location.hash.replace(/^#/, '');
+      if (wanted === state.town + '/' + state.activity) return; // our own update
+      readLink(); render();
+    });
 
     function load(url) {
       return fetch(url, { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).catch(function () { return null; });
@@ -45,6 +72,9 @@
 
   function render() {
     var town = townBySlug(state.town);
+    $('town').value = state.town;
+    $('linknote').innerHTML = state.notes.map(function (n) { return '<p class="note warn">' + esc(n) + '</p>'; }).join('');
+    save();
     var d = forecast && forecast.towns && forecast.towns[state.town];
     var fstate = d ? F.forecastState(d.fetchedAt, now) : 'missing';
     renderWarnings(town);
@@ -78,8 +108,10 @@
         '<p class="why">' + esc(w.reason) + '</p></li>';
     }).join('');
     var wait = $('wait'); wait.hidden = !res.wait; wait.textContent = res.wait || '';
+    $('rainline').textContent = W.nextRain(d, now) || '';
     $('share').hidden = !res.best;
-    $('rule').textContent = act.rule + ' Hours before sunrise, after sunset or already past are not counted.';
+    $('sharebox-wrap').hidden = true; $('shared').textContent = '';
+    $('rule').textContent = act.rule + ' Only whole daylight hours count (so a window can start a little after sunrise), and hours already past are left out.';
 
     renderStrip(d, town, res);
     var dl = W.daylight(W.irishParts(now).date, town.lat, town.lon);
@@ -89,6 +121,7 @@
       Math.floor(Math.abs(diff) / 60) + 'm ' + (Math.abs(diff) % 60) + 's ' + (diff < 0 ? 'less' : 'more') + ' light than yesterday.';
   }
 
+  // The strip draws daylight hours only, so each cell is wide enough to read on a phone.
   function renderStrip(d, town, res) {
     var hrs = W.hourly(d), byDate = {}, order = [];
     hrs.forEach(function (h) {
@@ -96,24 +129,35 @@
       if (!byDate[p.date]) { byDate[p.date] = { label: p.label, hours: {} }; order.push(p.date); }
       byDate[p.date].hours[p.hour] = h;
     });
-    var winCells = {};
-    res.windows.forEach(function (w) { for (var t = w.startMs; t < w.endMs; t += 3600000) winCells[t] = true; });
+    var inWin = {};
+    res.windows.forEach(function (w) { w.spans.forEach(function (sp) { for (var t = sp.startMs; t < sp.endMs; t += 3600000) inWin[t] = true; }); });
     var firstHour = Math.floor(now / 3600000) * 3600000;
-    var rows = order.slice(0, 5).map(function (date) {
+    var words = [], dates = [];
+    order.forEach(function (date) {
+      var s = W.daySummary(d, date, town.lat, town.lon, now);
+      if (s && dates.length < 5) { dates.push(date); words.push(s); }
+    });
+    $('strip-note').textContent = order.length && dates[0] !== order[0] ? 'Today is nearly over, so the strip starts tomorrow.' : '';
+    var range = W.dayRange(dates, town.lat, town.lon), lo = range[0], hi = range[1], n = hi - lo;
+    var cols = 'grid-template-columns:repeat(' + n + ',1fr)';
+    var rows = dates.map(function (date) {
       var day = byDate[date], dl = W.daylight(date, town.lat, town.lon), cells = '';
-      for (var h = 0; h < 24; h++) {
+      for (var h = lo; h < hi; h++) {
         var x = day.hours[h], cls = 'c';
         if (!x || x.t < firstHour) { cells += '<i class="c na"></i>'; continue; }
         cls += x.rain >= 0.5 ? ' wet' : x.rain > 0.1 ? ' light' : '';
         if (x.t + 1800000 < dl.rise || x.t + 1800000 > dl.set) cls += ' night';
-        if (winCells[x.t]) cls += ' inwin';
-        var txt = (h < 10 ? '0' : '') + h + ':00, ' + (x.rain >= 0.5 ? 'rain' : x.rain > 0.1 ? 'light rain' : 'dry') + (winCells[x.t] ? ', in your window' : '');
+        if (inWin[x.t]) cls += ' inwin';
+        var txt = (h < 10 ? '0' : '') + h + ':00, ' + (x.rain >= 0.5 ? 'rain' : x.rain > 0.1 ? 'light rain' : 'dry') + (inWin[x.t] ? ', in your window' : '');
         cells += '<i class="' + cls + '" title="' + esc(day.label + ' ' + txt) + '"></i>';
       }
       var parts = day.label.split(' ');
-      return '<div class="row"><span class="d">' + parts[0] + '<small>' + parts.slice(1).join(' ') + '</small></span><div class="cells">' + cells + '</div></div>';
+      return '<div class="row"><span class="d">' + parts[0] + '<small>' + parts.slice(1).join(' ') + '</small></span><div class="cells" style="' + cols + '">' + cells + '</div></div>';
     }).join('');
-    $('strip').innerHTML = rows + '<div class="hrs"><span></span><span><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></span></div>';
+    var labels = '';
+    for (var h = lo; h < hi; h++) labels += '<span>' + ((h - lo) % 3 === 0 ? (h < 10 ? '0' : '') + h : '') + '</span>';
+    $('strip').innerHTML = rows + '<div class="row hrs"><span></span><div class="cells" style="' + cols + '">' + labels + '</div></div>';
+    $('daywords').innerHTML = words.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('');
   }
 
   function fmtRange(w) {
@@ -154,16 +198,29 @@
   function share() {
     var r = state.result, town = townBySlug(state.town), act = W.byId(state.activity);
     if (!r || !r.best) return;
-    var text = town.name + ': ' + r.best.label + ', ' + r.best.start + ' to ' + r.best.end + ' is a ' + r.best.score.toLowerCase() +
-      ' window for ' + act.name.toLowerCase() + '. ' + r.best.reason;
-    var url = location.href.split('#')[0] + '#' + state.town + '/' + state.activity;
-    var note = $('shared');
-    function done(msg) { note.textContent = msg; setTimeout(function () { note.textContent = ''; }, 4000); }
-    if (navigator.share) {
-      navigator.share({ title: 'Dry Window', text: text, url: url }).catch(function () { /* cancelled */ });
-    } else if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text + ' ' + url).then(function () { done('Copied, ready to paste.'); }, function () { done('Could not copy.'); });
-    } else { done('Sharing is not available in this browser.'); }
+    var payload = {
+      title: 'Dry Window', text: S.shareText(town.name, act.doing, r.best),
+      url: location.href.split('#')[0] + '#' + state.town + '/' + state.activity
+    };
+    var env = {
+      share: navigator.share ? function (p) { return navigator.share(p); } : null,
+      writeText: navigator.clipboard && navigator.clipboard.writeText ? function (t) { return navigator.clipboard.writeText(t); } : null,
+      execCopy: function (t) {
+        var ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select();
+        var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(ta); return ok;
+      }
+    };
+    S.deliver(env, payload).then(function (how) {
+      var note = $('shared'), box = $('sharebox');
+      note.textContent = S.MESSAGES[how];
+      if (how === 'manual') {
+        box.value = payload.text + ' ' + payload.url;
+        $('sharebox-wrap').hidden = false; box.focus(); box.select();
+      } else { $('sharebox-wrap').hidden = true; }
+      if (how !== 'manual') setTimeout(function () { if (note.textContent === S.MESSAGES[how]) note.textContent = ''; }, 6000);
+    });
   }
 
   init();
