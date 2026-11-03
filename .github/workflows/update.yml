@@ -1,0 +1,67 @@
+name: Update forecast and deploy
+
+# Written, not yet run. Needs the repo's Pages source set to "GitHub Actions".
+on:
+  schedule:
+    # Four times a day, six hours apart (UTC). The page marks data stale after 14 hours.
+    - cron: '0 5 * * *'
+    - cron: '0 11 * * *'
+    - cron: '0 17 * * *'
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write   # to commit the refreshed JSON, so the last good data is never lost
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test test/*.test.js
+
+  update:
+    needs: test            # nothing is fetched or published unless the tests pass
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Fetch forecast and warnings (keeps the last good files on any failure)
+        run: node scripts/fetch-forecast.js
+        continue-on-error: true
+      - name: Test again with the fresh files
+        run: node --test test/*.test.js
+      - name: Save the refreshed data
+        run: |
+          git config user.name "dry-window-bot"
+          git config user.email "dry-window-bot@users.noreply.github.com"
+          git add site/data/forecast.json site/data/warnings.json
+          git diff --cached --quiet || git commit -m "Refresh forecast and warnings [skip ci]"
+          git push
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: update
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
