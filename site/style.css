@@ -110,3 +110,4 @@ select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var
 .else[open] > summary::before{transform:rotate(90deg)}
 .warn .raw{font-size:.8rem;opacity:.9}
 .warn .raw span{display:inline-block;margin-right:10px}
+.warn .wbody p,.warn .wbody li{white-space:pre-line}
