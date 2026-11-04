@@ -74,8 +74,8 @@
   // The store makes sure an older or slower answer never replaces a newer one.
   var warnStore = Wn.createStore({
     now: function () { return Date.now(); }, timeoutMs: 8000,
-    fetchLive: function () {
-      return fetch(Wn.LIVE_URL, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' })
+    fetchLive: function (signal) {
+      return fetch(Wn.LIVE_URL, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: signal })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
     },
     fetchSnapshot: function () {

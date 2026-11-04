@@ -8,6 +8,7 @@ const Wn = require('../site/warnings.js');
 const feed = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'warnings-sample.json'), 'utf8'));
 const snapshot = { fetchedAt: '2026-11-03T05:00:00.000Z', warnings: feed };
 const HOUR = 3600000;
+const never = () => new Promise(() => {});
 
 // A promise we settle by hand, to make requests finish in any order.
 function deferred() {
@@ -123,4 +124,87 @@ test('already-expired warnings are not counted, and no valid warnings means no t
   assert.strictEqual(Wn.nextExpiryMs(feed, Date.parse('2026-11-05T00:00:00Z')), null);
   assert.strictEqual(Wn.nextExpiryMs([], 0), null);
   assert.strictEqual(Wn.nextExpiryMs(null, 0), null);
+});
+
+// ---- a hung request can never leave the page on "Checking..." for ever --------------------------------------
+test('live failing and the snapshot hanging: the store gives up after the timeout and answers "none"', async () => {
+  const { store } = makeStore({
+    fetchLive: async () => { throw new Error('offline'); },
+    fetchSnapshot: never, timeoutMs: 30
+  });
+  const r = await store.refresh();
+  assert.strictEqual(r.source, 'none');
+  assert.deepStrictEqual(r.list, []);
+});
+
+test('the "none" answer leads to the met.ie/warnings message, not to "Checking..."', async () => {
+  const V = require('../site/warnview.js');
+  const { store } = makeStore({ fetchLive: never, fetchSnapshot: never, timeoutMs: 30 });
+  const r = await store.refresh();
+  const html = V.renderBox({ warnings: r, county: 'Sligo', now: Date.parse('2026-11-03T08:00:00Z'), openKeys: [] });
+  assert.ok(!/Checking/.test(html));
+  assert.ok(/could not be loaded/.test(html) && html.includes('https://www.met.ie/warnings'));
+});
+
+test('live and snapshot both hanging: still answers, within the timeouts', async () => {
+  const { store } = makeStore({ fetchLive: never, fetchSnapshot: never, timeoutMs: 30 });
+  const started = Date.now();
+  const r = await store.refresh();
+  assert.strictEqual(r.source, 'none');
+  assert.ok(Date.now() - started < 1000, 'took ' + (Date.now() - started) + ' ms');
+});
+
+test('when the live request times out it is told to stop (its signal is aborted)', async () => {
+  let seen = null;
+  const { store } = makeStore({ fetchLive: (signal) => { seen = signal; return never(); }, timeoutMs: 20 });
+  await store.refresh();
+  assert.ok(seen, 'the live fetch should be given an abort signal');
+  assert.strictEqual(seen.aborted, true);
+});
+
+test('a live request that answers in time is not aborted', async () => {
+  let seen = null;
+  const { store } = makeStore({ fetchLive: async (signal) => { seen = signal; return []; }, timeoutMs: 200 });
+  await store.refresh();
+  await new Promise((r) => setTimeout(r, 250));
+  assert.strictEqual(seen.aborted, false);
+});
+
+test('a snapshot that hangs does not delay a live answer', async () => {
+  const { store } = makeStore({ fetchLive: async () => [], fetchSnapshot: never, timeoutMs: 5000 });
+  const r = await store.refresh();
+  assert.strictEqual(r.source, 'live');
+});
+
+// ---- both fail after a good live answer ------------------------------------------------------------------------------
+test('live [] then both live and snapshot failing: the last live answer is kept, not "none"', async () => {
+  let down = false;
+  const { store, advance } = makeStore({
+    fetchLive: async () => { if (down) throw new Error('live down'); return []; },
+    fetchSnapshot: async () => { if (down) throw new Error('snapshot down'); return snapshot; }
+  });
+  await store.refresh();
+  down = true;
+  advance(40 * 60000);
+  const r = await store.refresh();
+  assert.strictEqual(r.source, 'last-live');
+  assert.deepStrictEqual(r.list, []);
+  assert.strictEqual(r.ageMinutes, 40);
+});
+
+test('live [] then the live fetch failing and the snapshot hanging: still the last live answer', async () => {
+  let down = false;
+  const { store } = makeStore({
+    fetchLive: async () => { if (down) throw new Error('live down'); return []; },
+    fetchSnapshot: () => (down ? never() : Promise.resolve(snapshot)), timeoutMs: 30
+  });
+  await store.refresh();
+  down = true;
+  const r = await store.refresh();
+  assert.strictEqual(r.source, 'last-live');
+});
+
+test('both failing with no earlier live answer is still "none"', async () => {
+  const { store } = makeStore({ fetchLive: async () => { throw new Error('a'); }, fetchSnapshot: async () => { throw new Error('b'); } });
+  assert.strictEqual((await store.refresh()).source, 'none');
 });

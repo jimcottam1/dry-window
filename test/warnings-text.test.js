@@ -100,3 +100,16 @@ test('partition counts a headline match as local', () => {
   const w = { headline: 'Rain warning for Limerick', regions: ['EI99'], expiry: soon };
   assert.strictEqual(Wn.partition([w], 'Limerick', NOW).here.length, 1);
 });
+
+// ---- "N. Ireland" and "N Ireland" are Northern Ireland too ------------------------------------------------------------
+test('"N. Ireland" and "N Ireland" are not read as the whole of Ireland', () => {
+  ['Warning for N. Ireland', 'Warning for N Ireland', 'Warning for NI and N.Ireland', 'Warning for northern ireland'].forEach((h) => {
+    assert.strictEqual(Wn.appliesTo({ headline: h, regions: ['EI03'], expiry: soon }, 'Dublin'), false, h);
+  });
+});
+
+test('"in Ireland" and "Ireland" still mean the whole country', () => {
+  ['Wind warning in Ireland', 'Wind warning for Ireland', 'Status Yellow - Rain warning for all of Ireland'].forEach((h) => {
+    assert.strictEqual(Wn.appliesTo({ headline: h, regions: ['EI03'], expiry: soon }, 'Dublin'), true, h);
+  });
+});

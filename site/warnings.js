@@ -35,7 +35,7 @@
     for (var p in PROVINCES) {
       if (PROVINCES[p].indexOf(county) !== -1 && new RegExp('\\b' + p + '\\b', 'i').test(h)) return true;
     }
-    return /\bireland\b/i.test(h.replace(/northern\s+ireland/ig, ''));
+    return /\bireland\b/i.test(h.replace(/\b(northern|n)\.?\s*ireland/ig, ''));
   }
 
   // A warning is "here" if its headline names the county, its province or the whole country, or if
@@ -138,19 +138,24 @@
   // deps: { fetchLive(), fetchSnapshot(), now (ms), timeoutMs }
   function loadWarnings(deps) {
     var now = deps.now, timeoutMs = deps.timeoutMs || 8000;
-    function withTimeout(p) {
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    // Both requests get the same time limit, so a request that hangs can never leave the page waiting
+    // for ever. When the live request runs out of time it is told to stop.
+    function withTimeout(p, onTimeout) {
       return new Promise(function (resolve, reject) {
-        var t = setTimeout(function () { reject(new Error('timed out')); }, timeoutMs);
+        var t = setTimeout(function () { if (onTimeout) onTimeout(); reject(new Error('timed out')); }, timeoutMs);
         Promise.resolve(p).then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
       });
     }
-    return Promise.resolve().then(function () { return withTimeout(deps.fetchLive()); })
+    return Promise.resolve().then(function () {
+      return withTimeout(deps.fetchLive(controller ? controller.signal : undefined), function () { if (controller) controller.abort(); });
+    })
       .then(function (live) {
         if (!Array.isArray(live)) throw new Error('live feed is not a list');
         return { list: live, source: 'live', fetchedAt: new Date(now).toISOString(), ageHours: 0, ageMinutes: 0, liveError: null };
       })
       .catch(function (liveErr) {
-        return Promise.resolve().then(function () { return deps.fetchSnapshot(); }).then(function (snap) {
+        return Promise.resolve().then(function () { return withTimeout(deps.fetchSnapshot()); }).then(function (snap) {
           if (!snap || !Array.isArray(snap.warnings)) throw new Error('snapshot is not usable');
           var t = Date.parse(snap.fetchedAt);
           return {
@@ -181,7 +186,8 @@
           if (mySeq < applied) return current;           // an older request finishing late
           if (res.source === 'live') {
             lastLive = res;
-          } else if (res.source === 'snapshot' && lastLive && Date.parse(lastLive.fetchedAt) >= Date.parse(res.fetchedAt)) {
+          } else if (lastLive && (res.source === 'none' ||
+            (res.source === 'snapshot' && Date.parse(lastLive.fetchedAt) >= Date.parse(res.fetchedAt)))) {
             var mins = Math.max(0, Math.floor((now - Date.parse(lastLive.fetchedAt)) / 60000));
             res = {
               list: lastLive.list, source: 'last-live', fetchedAt: lastLive.fetchedAt, ageMinutes: mins,
