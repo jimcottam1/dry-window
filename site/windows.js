@@ -262,8 +262,68 @@
     return out;
   }
 
+  // ---- the window frame in the week strip ----
+  // flags: one boolean per column (hour). Returns [[firstColumn, endColumnExclusive], ...].
+  function frameRuns(flags) {
+    var cols = [];
+    (flags || []).forEach(function (f, i) { if (f) cols.push(i); });
+    return runs(cols);
+  }
+
+  // Hour flags for one Irish date from the window list: true where an hour lies inside a window.
+  function dayFlags(windows, dateStr, lo, hi) {
+    var flags = [];
+    for (var h = lo; h < hi; h++) flags.push(false);
+    (windows || []).forEach(function (w) {
+      (w.spans || []).forEach(function (sp) {
+        var p = irishParts(sp.startMs);
+        if (p.date !== dateStr) return;
+        var n = Math.round((sp.endMs - sp.startMs) / HOUR);
+        for (var k = 0; k < n; k++) { var i = p.hour + k - lo; if (i >= 0 && i < flags.length) flags[i] = true; }
+      });
+    });
+    return flags;
+  }
+
+  // "08:00\u201317:00" for a run, where lo is the clock hour of column 0.
+  function frameLabel(lo, run) { return pad(lo + run[0]) + ':00\u2013' + pad((lo + run[1]) % 24) + ':00'; }
+
+  // Only the best window of each day is framed: the first-ranked window with a span on that date
+  // (windows come best first). Returns a list of at most one window-like object holding that one span.
+  function dayBest(windows, dateStr) {
+    var list = windows || [];
+    for (var i = 0; i < list.length; i++) {
+      var spans = (list[i] && list[i].spans) || [];
+      for (var j = 0; j < spans.length; j++) {
+        if (irishParts(spans[j].startMs).date === dateStr) return [{ spans: [spans[j]] }];
+      }
+    }
+    return [];
+  }
+
+  // The time label always sits below its frame. How many strip columns does it need?
+  // stripPx: width of the strip; dayColPx and gapPx: the day label column and its gap; n: hour columns.
+  function labelCols(stripPx, dayColPx, gapPx, n, labelPx) {
+    var cellPx = (stripPx - dayColPx - gapPx) / n;
+    if (!(cellPx > 0)) cellPx = 10;
+    return Math.min(n, Math.max(1, Math.ceil(labelPx / cellPx)));
+  }
+
+  // Left-align the label under the frame start, unless it would run off the right edge: then right-align it to the frame end.
+  function labelAlign(run, n, cols) { return run[0] + cols <= n ? 'start' : 'end'; }
+
+  // Call fn once, after ms of quiet, with the latest arguments. timers can be replaced in tests.
+  function debounce(fn, ms, timers) {
+    var t = timers || { set: function (f, m) { return setTimeout(f, m); }, clear: function (id) { clearTimeout(id); } }, id = null;
+    return function () {
+      var args = arguments;
+      if (id !== null) t.clear(id);
+      id = t.set(function () { id = null; fn.apply(null, args); }, ms);
+    };
+  }
+
   // A day in words, for screen readers and for anyone who finds the coloured strip hard to read.
-  function daySummary(series, dateStr, lat, lon, now) {
+  function daySummary(series, dateStr, lat, lon, now, windows) {
     var hrs = hourly(series), d = daylight(dateStr, lat, lon), first = Math.floor(now / HOUR) * HOUR;
     var day = hrs.filter(function (h) {
       return irishParts(h.t).date === dateStr && h.t >= first && h.t + HOUR / 2 >= d.rise && h.t + HOUR / 2 <= d.set;
@@ -275,8 +335,10 @@
       ? 'rain around ' + wet.map(function (r) { return pad(r[0]) + ':00 to ' + pad(r[1]) + ':00'; }).join(', ')
       : 'dry in daylight';
     var kmh = day.map(function (h) { return h.wind * 3.6; }), temps = day.map(function (h) { return h.temp; });
+    var db = dayBest(windows, dateStr), sp0 = db.length ? db[0].spans[0] : null;
+    var bw = sp0 ? ' Best window ' + irishClock(sp0.startMs) + '\u2013' + irishClock(sp0.endMs) + '.' : '';
     return label + ': ' + rain + '. Wind up to ' + Math.round(Math.max.apply(null, kmh)) + ' km/h. ' +
-      Math.round(Math.min.apply(null, temps)) + ' to ' + Math.round(Math.max.apply(null, temps)) + ' degrees.';
+      Math.round(Math.min.apply(null, temps)) + ' to ' + Math.round(Math.max.apply(null, temps)) + ' degrees.' + bw;
   }
 
   // First and last Irish clock hour to draw in the strip: the daylight hours of the days shown.
@@ -293,7 +355,7 @@
 
   return {
     ACTIVITIES: ACTIVITIES, byId: byId, resolveActivity: resolveActivity, nextRain: nextRain,
-    daySummary: daySummary, dayRange: dayRange, hourly: hourly, findWindows: findWindows,
+    daySummary: daySummary, dayRange: dayRange, frameRuns: frameRuns, dayFlags: dayFlags, frameLabel: frameLabel, dayBest: dayBest, labelCols: labelCols, labelAlign: labelAlign, debounce: debounce, hourly: hourly, findWindows: findWindows,
     irishParts: irishParts, irishClock: irishClock, daylight: daylight, HOUR: HOUR
   };
 });
