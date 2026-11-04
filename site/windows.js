@@ -262,8 +262,48 @@
     return out;
   }
 
+  // ---- the window frame in the week strip ----
+  // flags: one boolean per column (hour). Returns [[firstColumn, endColumnExclusive], ...].
+  function frameRuns(flags) {
+    var cols = [];
+    (flags || []).forEach(function (f, i) { if (f) cols.push(i); });
+    return runs(cols);
+  }
+
+  // Hour flags for one Irish date from the window list: true where an hour lies inside a window.
+  function dayFlags(windows, dateStr, lo, hi) {
+    var flags = [];
+    for (var h = lo; h < hi; h++) flags.push(false);
+    (windows || []).forEach(function (w) {
+      (w.spans || []).forEach(function (sp) {
+        var p = irishParts(sp.startMs);
+        if (p.date !== dateStr) return;
+        var n = Math.round((sp.endMs - sp.startMs) / HOUR);
+        for (var k = 0; k < n; k++) { var i = p.hour + k - lo; if (i >= 0 && i < flags.length) flags[i] = true; }
+      });
+    });
+    return flags;
+  }
+
+  // "08:00\u201317:00" for a run, where lo is the clock hour of column 0.
+  function frameLabel(lo, run) { return pad(lo + run[0]) + ':00\u2013' + pad((lo + run[1]) % 24) + ':00'; }
+
+  // Where each frame's time label goes: to the right if minFree columns are free up to the next frame,
+  // else to the left, else below. Returns [{start, end, side}].
+  function frameLayout(flags, minFree) {
+    var rs = frameRuns(flags), n = (flags || []).length, usedUntil = 0, out = [];
+    rs.forEach(function (r, i) {
+      var nextStart = rs[i + 1] ? rs[i + 1][0] : n;
+      var freeR = nextStart - r[1], freeL = r[0] - Math.max(usedUntil, i ? rs[i - 1][1] : 0), side = 'below';
+      if (freeR >= minFree) side = 'right'; else if (freeL >= minFree) side = 'left';
+      usedUntil = side === 'right' ? r[1] + minFree : r[1];
+      out.push({ start: r[0], end: r[1], side: side });
+    });
+    return out;
+  }
+
   // A day in words, for screen readers and for anyone who finds the coloured strip hard to read.
-  function daySummary(series, dateStr, lat, lon, now) {
+  function daySummary(series, dateStr, lat, lon, now, windows) {
     var hrs = hourly(series), d = daylight(dateStr, lat, lon), first = Math.floor(now / HOUR) * HOUR;
     var day = hrs.filter(function (h) {
       return irishParts(h.t).date === dateStr && h.t >= first && h.t + HOUR / 2 >= d.rise && h.t + HOUR / 2 <= d.set;
@@ -275,8 +315,16 @@
       ? 'rain around ' + wet.map(function (r) { return pad(r[0]) + ':00 to ' + pad(r[1]) + ':00'; }).join(', ')
       : 'dry in daylight';
     var kmh = day.map(function (h) { return h.wind * 3.6; }), temps = day.map(function (h) { return h.temp; });
+    var best = [];
+    (windows || []).forEach(function (w) {
+      (w.spans || []).forEach(function (sp) {
+        if (irishParts(sp.startMs).date === dateStr) best.push({ t: sp.startMs, text: irishClock(sp.startMs) + '\u2013' + irishClock(sp.endMs) });
+      });
+    });
+    best.sort(function (a, b) { return a.t - b.t; });
+    var bw = best.length ? ' Best window' + (best.length > 1 ? 's' : '') + ' ' + best.map(function (b) { return b.text; }).join(' and ') + '.' : '';
     return label + ': ' + rain + '. Wind up to ' + Math.round(Math.max.apply(null, kmh)) + ' km/h. ' +
-      Math.round(Math.min.apply(null, temps)) + ' to ' + Math.round(Math.max.apply(null, temps)) + ' degrees.';
+      Math.round(Math.min.apply(null, temps)) + ' to ' + Math.round(Math.max.apply(null, temps)) + ' degrees.' + bw;
   }
 
   // First and last Irish clock hour to draw in the strip: the daylight hours of the days shown.
@@ -293,7 +341,7 @@
 
   return {
     ACTIVITIES: ACTIVITIES, byId: byId, resolveActivity: resolveActivity, nextRain: nextRain,
-    daySummary: daySummary, dayRange: dayRange, hourly: hourly, findWindows: findWindows,
+    daySummary: daySummary, dayRange: dayRange, frameRuns: frameRuns, dayFlags: dayFlags, frameLabel: frameLabel, frameLayout: frameLayout, hourly: hourly, findWindows: findWindows,
     irishParts: irishParts, irishClock: irishClock, daylight: daylight, HOUR: HOUR
   };
 });

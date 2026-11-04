@@ -129,30 +129,40 @@
       if (!byDate[p.date]) { byDate[p.date] = { label: p.label, hours: {} }; order.push(p.date); }
       byDate[p.date].hours[p.hour] = h;
     });
-    var inWin = {};
-    res.windows.forEach(function (w) { w.spans.forEach(function (sp) { for (var t = sp.startMs; t < sp.endMs; t += 3600000) inWin[t] = true; }); });
     var firstHour = Math.floor(now / 3600000) * 3600000;
     var words = [], dates = [];
     order.forEach(function (date) {
-      var s = W.daySummary(d, date, town.lat, town.lon, now);
+      var s = W.daySummary(d, date, town.lat, town.lon, now, res.windows);
       if (s && dates.length < 5) { dates.push(date); words.push(s); }
     });
     $('strip-note').textContent = order.length && dates[0] !== order[0] ? 'Today is nearly over, so the strip starts tomorrow.' : '';
     var range = W.dayRange(dates, town.lat, town.lon), lo = range[0], hi = range[1], n = hi - lo;
     var cols = 'grid-template-columns:repeat(' + n + ',1fr)';
+    // Room for a time label such as 08:00–17:00 (about 70 px) beside a frame, counted in columns.
+    var cellPx = Math.max(10, (($('strip').clientWidth || 360) - (window.innerWidth <= 420 ? 36 : 44) - 8) / n);
+    var minFree = Math.max(3, Math.ceil(70 / cellPx));
     var rows = dates.map(function (date) {
       var day = byDate[date], dl = W.daylight(date, town.lat, town.lon), cells = '';
+      var flags = W.dayFlags(res.windows, date, lo, hi);
       for (var h = lo; h < hi; h++) {
         var x = day.hours[h], cls = 'c';
         if (!x || x.t < firstHour) { cells += '<i class="c na"></i>'; continue; }
         cls += x.rain >= 0.5 ? ' wet' : x.rain > 0.1 ? ' light' : '';
         if (x.t + 1800000 < dl.rise || x.t + 1800000 > dl.set) cls += ' night';
-        if (inWin[x.t]) cls += ' inwin';
-        var txt = (h < 10 ? '0' : '') + h + ':00, ' + (x.rain >= 0.5 ? 'rain' : x.rain > 0.1 ? 'light rain' : 'dry') + (inWin[x.t] ? ', in your window' : '');
+        var txt = (h < 10 ? '0' : '') + h + ':00, ' + (x.rain >= 0.5 ? 'rain' : x.rain > 0.1 ? 'light rain' : 'dry') + (flags[h - lo] ? ', in the best window' : '');
         cells += '<i class="' + cls + '" title="' + esc(day.label + ' ' + txt) + '"></i>';
       }
-      var parts = day.label.split(' ');
-      return '<div class="row"><span class="d">' + parts[0] + '<small>' + parts.slice(1).join(' ') + '</small></span><div class="cells" style="' + cols + '">' + cells + '</div></div>';
+      var parts = day.label.split(' '), frames = '', below = false;
+      // One continuous frame around each run of window hours, with its times written beside it.
+      W.frameLayout(flags, minFree).forEach(function (f) {
+        var a = f.start + 1, b = f.end + 1, label = W.frameLabel(lo, [f.start, f.end]);
+        frames += '<b class="frame" style="grid-column:' + a + '/' + b + '"></b>';
+        if (f.side === 'right') frames += '<span class="ft r" style="grid-column:' + b + '/-1">' + label + '</span>';
+        else if (f.side === 'left') frames += '<span class="ft l" style="grid-column:1/' + a + '">' + label + '</span>';
+        else { below = true; frames += '<span class="ft b" style="grid-column:' + a + '/-1">' + label + '</span>'; }
+      });
+      return '<div class="row"><span class="d">' + parts[0] + '<small>' + parts.slice(1).join(' ') + '</small></span><div class="cells' + (below ? ' hasbelow' : '') + '" style="' + cols + '">' + cells +
+        (frames ? '<div class="fr" style="' + cols + '">' + frames + '</div>' : '') + '</div></div>';
     }).join('');
     var labels = '';
     for (var h = lo; h < hi; h++) labels += '<span>' + ((h - lo) % 3 === 0 ? (h < 10 ? '0' : '') + h : '') + '</span>';

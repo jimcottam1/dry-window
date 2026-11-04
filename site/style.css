@@ -74,20 +74,30 @@ select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var
 .row{display:grid;grid-template-columns:44px 1fr;align-items:center;gap:8px}
 .row .d{font-size:.85rem;line-height:1.1}
 .row .d small{display:block;color:var(--muted);font-size:.7rem}
-.cells{display:grid;grid-template-columns:repeat(24,1fr);gap:2px}
+.cells{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;position:relative}
 .c{height:24px;border-radius:3px;background:var(--dry)}
 .c.light{background:var(--light)}
 .c.wet{background:var(--wet)}
 .c.night{background:var(--night)}
 .c.na{background:transparent;border:1px dashed var(--line)}
-.c.inwin{outline:2px solid var(--ink);outline-offset:-2px;position:relative}
-.c.inwin::after{content:"";position:absolute;inset:9px 3px;border-top:3px solid var(--ink);border-radius:2px}
+/* The window mark: one continuous frame around each run of window hours, drawn over the cells.
+   The key sample uses the same rule, so the two look identical. A halo in the page colour keeps it
+   readable on yellow, blue and grey, and it does not depend on hue. */
+.frame,.kframe{border:3px solid var(--ink);border-radius:8px;box-shadow:0 0 0 1px var(--bg),inset 0 0 0 1px var(--bg)}
+.fr{position:absolute;left:0;right:0;top:0;display:grid;gap:2px;grid-template-rows:24px auto;pointer-events:none}
+.fr .frame{grid-row:1}
+.ft{font-size:.72rem;font-weight:700;color:var(--ink);white-space:nowrap;align-self:center;line-height:1.2}
+.ft.r,.ft.l{grid-row:1;background:var(--bg);padding:1px 5px;border-radius:6px}
+.ft.r{justify-self:start;margin-left:3px}
+.ft.l{justify-self:end;margin-right:3px}
+.ft.b{grid-row:2;margin-top:2px;justify-self:start}
+.cells.hasbelow{margin-bottom:17px}
 .hrs{font-size:.7rem;color:var(--muted)}
 
 .key{display:flex;flex-wrap:wrap;gap:6px 16px;list-style:none;padding:0;margin:10px 0 0;font-size:.85rem;color:var(--muted)}
 .k{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 .k.dry{background:var(--dry)}.k.light{background:var(--light)}.k.wet{background:var(--wet)}
-.k.kwin{background:var(--dry);outline:2px solid var(--ink);outline-offset:-2px}
+.k.kframe{background:var(--dry);width:22px;height:14px;vertical-align:-3px}
 .k.night{background:var(--night)}
 .sun{margin:10px 0 0;color:var(--muted)}
 
