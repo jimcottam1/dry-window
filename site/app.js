@@ -1,7 +1,8 @@
-// Dry Window page. Reads only the saved JSON files next to it (no live calls to anyone).
+// Dry Window page. The forecast comes from the saved JSON next to it. Warnings are asked for live
+// from Met Éireann (read-only), with the saved copy as the fallback.
 (function () {
   'use strict';
-  var W = window.DWWindows, Wn = window.DWWarnings, F = window.DWFresh, S = window.DWShare, T = window.DWTowns;
+  var W = window.DWWindows, Wn = window.DWWarnings, V = window.DWWarnView, F = window.DWFresh, S = window.DWShare, T = window.DWTowns;
   var TOWNS = T.TOWNS;
   var $ = function (id) { return document.getElementById(id); };
   var forecast = null, warnings = null, now = Date.now();
@@ -58,9 +59,32 @@
     function load(url) {
       return fetch(url, { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).catch(function () { return null; });
     }
-    Promise.all([load('data/forecast.json'), load('data/warnings.json')]).then(function (res) {
-      forecast = res[0]; warnings = res[1]; now = Date.now(); render();
+    // The forecast is drawn as soon as it arrives; the warnings box says "Checking..." until the live
+    // answer (or the fallback) comes, so a slow warnings request never holds the page up.
+    load('data/forecast.json').then(function (fc) { forecast = fc; now = Date.now(); render(); });
+    refreshWarnings();
+    // Warnings must stay current: ask again every 10 minutes and whenever the page comes back into view.
+    setInterval(refreshWarnings, 600000);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') refreshWarnings();
     });
+  }
+
+  // Live from Met Éireann first (read-only request, no cookies or identifiers), saved copy as fallback.
+  // The store makes sure an older or slower answer never replaces a newer one.
+  var warnStore = Wn.createStore({
+    now: function () { return Date.now(); }, timeoutMs: 8000,
+    fetchLive: function (signal) {
+      return fetch(Wn.LIVE_URL, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: signal })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+    },
+    fetchSnapshot: function () {
+      return fetch('data/warnings.json', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+    }
+  });
+
+  function refreshWarnings() {
+    return warnStore.refresh().then(function (w) { warnings = w; now = Date.now(); renderWarnings(townBySlug(state.town)); renderStamp(); });
   }
 
   function save() {
@@ -89,7 +113,7 @@
     $('app').hidden = false;
     $('status').textContent = 'Forecast for ' + town.name + ' saved ' + when(Date.parse(d.fetchedAt)) + ' (Irish time).';
     notice(fstate === 'stale' ? 'This forecast is a few hours old and the next update has not arrived. Treat the windows with care.' : '', 'warn');
-    $('stamp').textContent = 'Last saved: forecast ' + when(Date.parse(d.fetchedAt)) + (warnings ? ', warnings ' + when(Date.parse(warnings.fetchedAt)) : '') + '. Irish time.';
+    renderStamp();
 
     $('activities').innerHTML = W.ACTIVITIES.map(function (a) {
       return '<button type="button" class="chip" data-id="' + a.id + '" aria-pressed="' + (a.id === state.activity) + '">' +
@@ -171,39 +195,27 @@
     $('daywords').innerHTML = words.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('');
   }
 
-  function fmtRange(w) {
-    var a = Date.parse(w.onset), b = Date.parse(w.expiry);
-    if (isNaN(a) || isNaN(b)) return '';
-    return when(a) + ' to ' + when(b);
+  function renderStamp() {
+    var d = forecast && forecast.towns && forecast.towns[state.town];
+    if (!d) return;
+    var w = warnings;
+    $('stamp').textContent = 'Forecast saved ' + when(Date.parse(d.fetchedAt)) + '. Warnings ' +
+      (!w ? 'being checked.' : w.source === 'none' ? 'not available.' :
+        w.source === 'live' ? 'checked live ' + when(Date.parse(w.fetchedAt)) + '.' :
+        w.source === 'last-live' ? 'from the last live check, ' + when(Date.parse(w.fetchedAt)) + '.' :
+        'from a saved copy, ' + when(Date.parse(w.fetchedAt)) + '.') + ' Irish time.';
   }
 
-  // Warnings are shown with the official headline and description word for word.
+  var expiryTimer = null;
+  // Warnings are shown with the official headline and description word for word (see warnview.js).
+  // Cards the person has opened stay open, and the box is redrawn the moment a warning expires.
   function renderWarnings(town) {
-    var box = $('warnings');
-    if (!warnings || !Array.isArray(warnings.warnings)) {
-      box.innerHTML = '<div class="warn none"><b>Weather warnings could not be loaded.</b> Please check <a href="https://www.met.ie/warnings">met.ie/warnings</a> before you go out.</div>';
-      return;
-    }
-    var list = Wn.forCounty(warnings.warnings, town.county, now);
-    var stale = F.warningsState(warnings.fetchedAt, now) === 'stale';
-    var head = stale ? '<p class="note warn">Warnings were last saved ' + esc(when(Date.parse(warnings.fetchedAt))) + ' and may be out of date. Check <a href="https://www.met.ie/warnings">met.ie/warnings</a>.</p>' : '';
-    if (!list.length) {
-      box.innerHTML = head + '<div class="warn none">No Met Éireann weather warnings for Co. ' + esc(town.county) + ' in the last saved update.</div>';
-      return;
-    }
-    box.innerHTML = head + list.map(function (w) {
-      var body = '', inList = false;
-      Wn.blocks(w.description).forEach(function (b) {
-        if (b.type === 'li' && !inList) { body += '<ul>'; inList = true; }
-        if (b.type !== 'li' && inList) { body += '</ul>'; inList = false; }
-        body += b.type === 'li' ? '<li>' + esc(b.text) + '</li>' : '<p>' + esc(b.text) + '</p>';
-      });
-      if (inList) body += '</ul>';
-      var lv = /^(yellow|orange|red)$/.test(w.level) ? w.level : 'yellow';
-      return '<div class="warn ' + lv + '"><b>' + esc(w.headline) + '</b>' +
-        '<p class="meta">' + esc(fmtRange(w)) + ' (Irish time). Source: Met Éireann.</p>' +
-        '<details><summary>Read the full warning</summary><div class="wbody">' + body + '</div></details></div>';
-    }).join('');
+    var box = $('warnings'), openKeys = [].map.call(box.querySelectorAll('details[open][data-key]'), function (d) { return d.getAttribute('data-key'); });
+    var t = Date.now();
+    box.innerHTML = V.renderBox({ warnings: warnings, county: town.county, now: t, openKeys: openKeys });
+    if (expiryTimer) clearTimeout(expiryTimer);
+    var ms = warnings ? Wn.nextExpiryMs(warnings.list, t) : null;
+    if (ms !== null && ms < 86400000) expiryTimer = setTimeout(function () { renderWarnings(townBySlug(state.town)); }, ms + 500);
   }
 
   function share() {

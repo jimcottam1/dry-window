@@ -17,7 +17,7 @@ Lead: **Ada**. Developer: **Pip**. Shared specialists: **Sage** (sources and lic
 - Words readers see are drafts until the owner agrees them.
 
 ## Rules
-- **Met Éireann data** (open data licence, CC BY 4.0 with conditions): credit it; warnings shown with the forecast must be **unaltered and current**, and expired warnings removed. Say what the licence is accurately.
+- **Met Éireann data** (Met Éireann Custom Open Data Licence, 22 May 2018: based on CC BY 4.0 but its own licence): credit it; warnings shown with the forecast must be **unaltered and current**, and expired warnings removed. Say what the licence is accurately.
 - Only permitted sources (check `robots.txt` and terms); honest User-Agent `DryWindow/0.1 (+https://github.com/jimcottam1)`; never get round blocks.
 - No keys, accounts, tracking or third-party scripts. Saved town and activity stay in the browser only.
 - A failed fetch keeps the last good data; stale data is flagged on the page.
