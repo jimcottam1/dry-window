@@ -35,9 +35,13 @@
     return list.filter(function (w) { return w && isActive(w, now) && appliesTo(w, county); });
   }
 
+  // Turns HTML entities back into the characters they stand for. Nothing else about the text changes
+  // (a non-breaking space stays a non-breaking space; inner spacing is left exactly as sent).
   function decode(s) {
-    return s.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    return s.replace(/&#(\d+);/g, function (m, n) { return String.fromCodePoint(+n); })
+      .replace(/&#x([0-9a-f]+);/gi, function (m, n) { return String.fromCodePoint(parseInt(n, 16)); })
+      .replace(/&nbsp;/g, String.fromCharCode(160)).replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
   }
 
   // Description HTML -> [{type:'p'|'li', text}]. Text only, so nothing from the feed is run as code.
@@ -46,15 +50,70 @@
     var re = /<(p|li)[^>]*>([\s\S]*?)<\/\1>/gi, m, any = false;
     while ((m = re.exec(html || ''))) {
       any = true;
-      var text = decode(m[2].replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim();
+      var text = decode(m[2].replace(/<[^>]*>/g, '')).trim();
       if (text) out.push({ type: m[1].toLowerCase(), text: text });
     }
     if (!any) {
-      var plain = decode(String(html || '').replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim();
+      var plain = decode(String(html || '').replace(/<[^>]*>/g, '')).trim();
       if (plain) out.push({ type: 'p', text: plain });
     }
     return out;
   }
 
-  return { CODES: CODES, forCounty: forCounty, blocks: blocks, appliesTo: appliesTo, isActive: isActive };
+  var LIVE_URL = 'https://www.met.ie/Open_Data/json/warning_IRELAND.json';
+
+  // Every valid warning is kept (the licence says to publish the latest valid warnings): those for
+  // this county first, the rest as "elsewhere". Expired ones are dropped from both. Objects untouched.
+  function partition(list, county, now) {
+    var here = [], elsewhere = [];
+    (Array.isArray(list) ? list : []).forEach(function (w) {
+      if (!w || !isActive(w, now)) return;
+      (appliesTo(w, county) ? here : elsewhere).push(w);
+    });
+    return { here: here, elsewhere: elsewhere };
+  }
+
+  // The fields shown on the page, exactly as sent.
+  function view(w) {
+    return {
+      headline: w.headline, onset: w.onset, expiry: w.expiry, issued: w.issued, severity: w.severity,
+      certainty: w.certainty, type: w.type, level: w.level, blocks: blocks(w.description)
+    };
+  }
+
+  // Live feed first; if it fails (network, timeout, or not a list), the saved snapshot, with its own
+  // saved time so the page can say how old it is. A live empty list is a real answer and wins.
+  // deps: { fetchLive(), fetchSnapshot(), now (ms), timeoutMs }
+  function loadWarnings(deps) {
+    var now = deps.now, timeoutMs = deps.timeoutMs || 8000;
+    function withTimeout(p) {
+      return new Promise(function (resolve, reject) {
+        var t = setTimeout(function () { reject(new Error('timed out')); }, timeoutMs);
+        Promise.resolve(p).then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
+      });
+    }
+    return Promise.resolve().then(function () { return withTimeout(deps.fetchLive()); })
+      .then(function (live) {
+        if (!Array.isArray(live)) throw new Error('live feed is not a list');
+        return { list: live, source: 'live', fetchedAt: new Date(now).toISOString(), ageHours: 0, liveError: null };
+      })
+      .catch(function (liveErr) {
+        return Promise.resolve().then(function () { return deps.fetchSnapshot(); }).then(function (snap) {
+          if (!snap || !Array.isArray(snap.warnings)) throw new Error('snapshot is not usable');
+          var t = Date.parse(snap.fetchedAt);
+          return {
+            list: snap.warnings, source: 'snapshot', fetchedAt: snap.fetchedAt,
+            ageHours: isNaN(t) ? null : Math.max(0, Math.floor((now - t) / 3600000)),
+            liveError: String(liveErr && liveErr.message || liveErr)
+          };
+        }).catch(function () {
+          return { list: [], source: 'none', fetchedAt: null, ageHours: null, liveError: String(liveErr && liveErr.message || liveErr) };
+        });
+      });
+  }
+
+  return {
+    CODES: CODES, forCounty: forCounty, blocks: blocks, appliesTo: appliesTo, isActive: isActive,
+    LIVE_URL: LIVE_URL, partition: partition, view: view, loadWarnings: loadWarnings
+  };
 });

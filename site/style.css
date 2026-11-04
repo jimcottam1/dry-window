@@ -102,3 +102,11 @@ select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var
 .hrs .cells span{font-size:.7rem;color:var(--muted);text-align:left;overflow:visible;white-space:nowrap}
 .rules summary::before,.warn summary::before{content:"\25B8";display:inline-block;margin-right:8px;transition:transform .15s}
 .rules[open] summary::before,.warn details[open] summary::before{transform:rotate(90deg)}
+
+.wsource{margin:6px 0 0;font-size:.85rem;color:var(--muted)}
+.else{margin-top:8px}
+.else > summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600;color:var(--muted)}
+.else > summary::before{content:"\25B8";display:inline-block;margin-right:8px;transition:transform .15s}
+.else[open] > summary::before{transform:rotate(90deg)}
+.warn .raw{font-size:.8rem;opacity:.9}
+.warn .raw span{display:inline-block;margin-right:10px}
