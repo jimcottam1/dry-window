@@ -123,6 +123,7 @@
 
   // The strip draws daylight hours only, so each cell is wide enough to read on a phone.
   function renderStrip(d, town, res) {
+    state.stripArgs = [d, town, res]; // so a resize can draw it again
     var hrs = W.hourly(d), byDate = {}, order = [];
     hrs.forEach(function (h) {
       var p = W.irishParts(h.t);
@@ -138,12 +139,13 @@
     $('strip-note').textContent = order.length && dates[0] !== order[0] ? 'Today is nearly over, so the strip starts tomorrow.' : '';
     var range = W.dayRange(dates, town.lat, town.lon), lo = range[0], hi = range[1], n = hi - lo;
     var cols = 'grid-template-columns:repeat(' + n + ',1fr)';
-    // Room for a time label such as 08:00–17:00 (about 70 px) beside a frame, counted in columns.
-    var cellPx = Math.max(10, (($('strip').clientWidth || 360) - (window.innerWidth <= 420 ? 36 : 44) - 8) / n);
-    var minFree = Math.max(3, Math.ceil(70 / cellPx));
+    // Room for a time label such as 08:00–17:00 (about 70 px), counted in columns.
+    var labelN = W.labelCols($('strip').clientWidth || 360, window.innerWidth <= 420 ? 36 : 44, 8, n, 70);
+    var best = {}, anyFrame = false;
+    dates.forEach(function (date) { best[date] = W.dayBest(res.windows, date); if (best[date].length) anyFrame = true; });
     var rows = dates.map(function (date) {
       var day = byDate[date], dl = W.daylight(date, town.lat, town.lon), cells = '';
-      var flags = W.dayFlags(res.windows, date, lo, hi);
+      var flags = W.dayFlags(best[date], date, lo, hi);
       for (var h = lo; h < hi; h++) {
         var x = day.hours[h], cls = 'c';
         if (!x || x.t < firstHour) { cells += '<i class="c na"></i>'; continue; }
@@ -152,16 +154,15 @@
         var txt = (h < 10 ? '0' : '') + h + ':00, ' + (x.rain >= 0.5 ? 'rain' : x.rain > 0.1 ? 'light rain' : 'dry') + (flags[h - lo] ? ', in the best window' : '');
         cells += '<i class="' + cls + '" title="' + esc(day.label + ' ' + txt) + '"></i>';
       }
-      var parts = day.label.split(' '), frames = '', below = false;
-      // One continuous frame around each run of window hours, with its times written beside it.
-      W.frameLayout(flags, minFree).forEach(function (f) {
-        var a = f.start + 1, b = f.end + 1, label = W.frameLabel(lo, [f.start, f.end]);
+      var parts = day.label.split(' '), frames = '';
+      // One continuous frame around the day's best window, with its times always written below it.
+      W.frameRuns(flags).forEach(function (r) {
+        var a = r[0] + 1, b = r[1] + 1, label = W.frameLabel(lo, r);
         frames += '<b class="frame" style="grid-column:' + a + '/' + b + '"></b>';
-        if (f.side === 'right') frames += '<span class="ft r" style="grid-column:' + b + '/-1">' + label + '</span>';
-        else if (f.side === 'left') frames += '<span class="ft l" style="grid-column:1/' + a + '">' + label + '</span>';
-        else { below = true; frames += '<span class="ft b" style="grid-column:' + a + '/-1">' + label + '</span>'; }
+        if (W.labelAlign(r, n, labelN) === 'start') frames += '<span class="ft b" style="grid-column:' + a + '/-1">' + label + '</span>';
+        else frames += '<span class="ft b e" style="grid-column:1/' + b + '">' + label + '</span>';
       });
-      return '<div class="row"><span class="d">' + parts[0] + '<small>' + parts.slice(1).join(' ') + '</small></span><div class="cells' + (below ? ' hasbelow' : '') + '" style="' + cols + '">' + cells +
+      return '<div class="row"><span class="d">' + parts[0] + '<small>' + parts.slice(1).join(' ') + '</small></span><div class="cells' + (anyFrame ? ' hasbelow' : '') + '" style="' + cols + '">' + cells +
         (frames ? '<div class="fr" style="' + cols + '">' + frames + '</div>' : '') + '</div></div>';
     }).join('');
     var labels = '';
@@ -232,6 +233,11 @@
       if (how !== 'manual') setTimeout(function () { if (note.textContent === S.MESSAGES[how]) note.textContent = ''; }, 6000);
     });
   }
+
+  // Draw the strip again when the screen changes shape (turning a phone, resizing a window).
+  var redraw = W.debounce(function () { if (state.stripArgs) renderStrip.apply(null, state.stripArgs); }, 150);
+  window.addEventListener('resize', redraw);
+  window.addEventListener('orientationchange', redraw);
 
   init();
 })();

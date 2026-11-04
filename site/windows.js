@@ -288,18 +288,38 @@
   // "08:00\u201317:00" for a run, where lo is the clock hour of column 0.
   function frameLabel(lo, run) { return pad(lo + run[0]) + ':00\u2013' + pad((lo + run[1]) % 24) + ':00'; }
 
-  // Where each frame's time label goes: to the right if minFree columns are free up to the next frame,
-  // else to the left, else below. Returns [{start, end, side}].
-  function frameLayout(flags, minFree) {
-    var rs = frameRuns(flags), n = (flags || []).length, usedUntil = 0, out = [];
-    rs.forEach(function (r, i) {
-      var nextStart = rs[i + 1] ? rs[i + 1][0] : n;
-      var freeR = nextStart - r[1], freeL = r[0] - Math.max(usedUntil, i ? rs[i - 1][1] : 0), side = 'below';
-      if (freeR >= minFree) side = 'right'; else if (freeL >= minFree) side = 'left';
-      usedUntil = side === 'right' ? r[1] + minFree : r[1];
-      out.push({ start: r[0], end: r[1], side: side });
-    });
-    return out;
+  // Only the best window of each day is framed: the first-ranked window with a span on that date
+  // (windows come best first). Returns a list of at most one window-like object holding that one span.
+  function dayBest(windows, dateStr) {
+    var list = windows || [];
+    for (var i = 0; i < list.length; i++) {
+      var spans = (list[i] && list[i].spans) || [];
+      for (var j = 0; j < spans.length; j++) {
+        if (irishParts(spans[j].startMs).date === dateStr) return [{ spans: [spans[j]] }];
+      }
+    }
+    return [];
+  }
+
+  // The time label always sits below its frame. How many strip columns does it need?
+  // stripPx: width of the strip; dayColPx and gapPx: the day label column and its gap; n: hour columns.
+  function labelCols(stripPx, dayColPx, gapPx, n, labelPx) {
+    var cellPx = (stripPx - dayColPx - gapPx) / n;
+    if (!(cellPx > 0)) cellPx = 10;
+    return Math.min(n, Math.max(1, Math.ceil(labelPx / cellPx)));
+  }
+
+  // Left-align the label under the frame start, unless it would run off the right edge: then right-align it to the frame end.
+  function labelAlign(run, n, cols) { return run[0] + cols <= n ? 'start' : 'end'; }
+
+  // Call fn once, after ms of quiet, with the latest arguments. timers can be replaced in tests.
+  function debounce(fn, ms, timers) {
+    var t = timers || { set: function (f, m) { return setTimeout(f, m); }, clear: function (id) { clearTimeout(id); } }, id = null;
+    return function () {
+      var args = arguments;
+      if (id !== null) t.clear(id);
+      id = t.set(function () { id = null; fn.apply(null, args); }, ms);
+    };
   }
 
   // A day in words, for screen readers and for anyone who finds the coloured strip hard to read.
@@ -315,14 +335,8 @@
       ? 'rain around ' + wet.map(function (r) { return pad(r[0]) + ':00 to ' + pad(r[1]) + ':00'; }).join(', ')
       : 'dry in daylight';
     var kmh = day.map(function (h) { return h.wind * 3.6; }), temps = day.map(function (h) { return h.temp; });
-    var best = [];
-    (windows || []).forEach(function (w) {
-      (w.spans || []).forEach(function (sp) {
-        if (irishParts(sp.startMs).date === dateStr) best.push({ t: sp.startMs, text: irishClock(sp.startMs) + '\u2013' + irishClock(sp.endMs) });
-      });
-    });
-    best.sort(function (a, b) { return a.t - b.t; });
-    var bw = best.length ? ' Best window' + (best.length > 1 ? 's' : '') + ' ' + best.map(function (b) { return b.text; }).join(' and ') + '.' : '';
+    var db = dayBest(windows, dateStr), sp0 = db.length ? db[0].spans[0] : null;
+    var bw = sp0 ? ' Best window ' + irishClock(sp0.startMs) + '\u2013' + irishClock(sp0.endMs) + '.' : '';
     return label + ': ' + rain + '. Wind up to ' + Math.round(Math.max.apply(null, kmh)) + ' km/h. ' +
       Math.round(Math.min.apply(null, temps)) + ' to ' + Math.round(Math.max.apply(null, temps)) + ' degrees.' + bw;
   }
@@ -341,7 +355,7 @@
 
   return {
     ACTIVITIES: ACTIVITIES, byId: byId, resolveActivity: resolveActivity, nextRain: nextRain,
-    daySummary: daySummary, dayRange: dayRange, frameRuns: frameRuns, dayFlags: dayFlags, frameLabel: frameLabel, frameLayout: frameLayout, hourly: hourly, findWindows: findWindows,
+    daySummary: daySummary, dayRange: dayRange, frameRuns: frameRuns, dayFlags: dayFlags, frameLabel: frameLabel, dayBest: dayBest, labelCols: labelCols, labelAlign: labelAlign, debounce: debounce, hourly: hourly, findWindows: findWindows,
     irishParts: irishParts, irishClock: irishClock, daylight: daylight, HOUR: HOUR
   };
 });
