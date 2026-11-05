@@ -5,10 +5,8 @@ In priority order. The owner decides what's next; move an item to **Done** with 
 ## Sprint 1 (in progress)
 - **Live warnings and accurate licence wording** (Ada, branch dw-warnings): review fixes under way. Stale data must never bring back a cancelled warning; wording kept byte for byte.
 - **Run the scheduled data job once by hand** before going live (needs a push to the private repo first).
-- **Mowing edge case at the first forecast hour** (found by the Judge): Rowan to add the test and fix.
 
 ## Needs the owner's decision
-- **Dry days outside the top three windows get no frame.** `findWindows` keeps only the top three across the forecast, so a fully dry day 4 or 5 shows no "Best window". Options: keep each day's best before the top-three cut (recommended), or add a line to the key saying only the top three are framed.
 - **Draft wording:** 15 tag lines and the one-line reasons (see README).
 
 ## Accessibility (Iris)
@@ -17,3 +15,7 @@ In priority order. The owner decides what's next; move an item to **Done** with 
 
 ## Done
 - One frame round each day's best window, times always below, key "Best window" (6d38d46).
+- Every dry day keeps its best window beyond the top three, so each gets a frame (e2b34dc, branch dw-sprint1).
+- Mowing at the first forecast hour: regression test added; the code was already right, the Judge's mutation had just escaped (e2b34dc).
+- Short wording for counties whose region code is unconfirmed (883fccb).
+- Separate 3 s timeout for the warnings snapshot, `snapshotTimeoutMs` (6222bb4).

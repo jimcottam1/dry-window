@@ -62,6 +62,13 @@ test('live fetch that never answers is given up on after the timeout', async () 
   assert.strictEqual(r.source, 'snapshot');
 });
 
+test('the saved snapshot gets its own shorter limit (snapshotTimeoutMs)', async () => {
+  const t0 = Date.now();
+  const r = await Wn.loadWarnings(deps({ fetchLive: async () => { throw new Error('a'); }, fetchSnapshot: never, timeoutMs: 5000, snapshotTimeoutMs: 30 }).d);
+  assert.strictEqual(r.source, 'none');
+  assert.ok(Date.now() - t0 < 2000, 'took ' + (Date.now() - t0));
+});
+
 test('live and snapshot both unavailable: source is none, list empty, no throw', async () => {
   const r = await Wn.loadWarnings(deps({
     fetchLive: async () => { throw new Error('a'); }, fetchSnapshot: async () => { throw new Error('b'); }

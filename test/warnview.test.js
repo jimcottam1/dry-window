@@ -111,11 +111,10 @@ test('a county whose code is confirmed gets the plain "no current warnings" word
   assert.ok(!/not yet been able to confirm/.test(html));
 });
 
-test('a county whose code is a guess gets a softer sentence and a pointer to met.ie', () => {
+test('a county whose code is a guess gets the short sentence and a pointer to met.ie', () => {
   const html = box(live([]), 'Limerick');
-  assert.ok(/No current Met Éireann warnings found for Co\. Limerick/.test(html));
-  assert.ok(/not yet been able to confirm/.test(html));
-  assert.ok(html.includes('https://www.met.ie/warnings'));
+  assert.ok(html.includes('<div class="warn none">No warnings found for Co. Limerick. We\'re still confirming how Met Éireann labels this county, so please also check <a href="https://www.met.ie/warnings">met.ie/warnings</a>.</div>'), html);
+  assert.ok(!/not yet been able to confirm/.test(html));
   assert.ok(!/No current Met Éireann weather warnings for Co\. Limerick\./.test(html));
 });
 

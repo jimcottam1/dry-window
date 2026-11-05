@@ -68,8 +68,7 @@
       ? p.here.map(function (x) { return card(x, open); }).join('')
       : (sure
         ? '<div class="warn none">No current Met Éireann weather warnings for Co. ' + esc(county) + '.</div>'
-        : '<div class="warn none">No current Met Éireann warnings found for Co. ' + esc(county) + '. This page matches warnings to counties using region codes, and we have not yet been able to confirm the code for Co. ' +
-          esc(county) + ', so please also check ' + link + '.</div>');
+        : '<div class="warn none">No warnings found for Co. ' + esc(county) + '. We\'re still confirming how Met Éireann labels this county, so please also check ' + link + '.</div>');
     var elsewhere = p.elsewhere.length
       ? '<details class="else" data-key="else"' + (open['else'] ? ' open' : '') + '><summary>Warnings for other parts of Ireland (' + p.elsewhere.length + ')' +
         (sure ? '' : ' – check these too, as we may not match every county') + '</summary>' +
