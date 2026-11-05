@@ -62,6 +62,29 @@ test('temperature and wind arrays shorter than the rain array never turn the unk
   }
 });
 
+test('a forecast with no temperature or wind array at all is never read as calm weather at 10°C', () => {
+  const s = series('2026-11-04T08:00:00Z', 9);
+  delete s.temp; delete s.wind;
+  const o = Object.assign({ now: at('2026-11-04T08:00:00Z') }, LIMERICK);
+  for (const id of ['washing', 'paint', 'cycle', 'walk']) {
+    const r = W.findWindows(s, id, o);
+    assert.ok(!r.best, id + ' found a window with no wind or temperature data');
+    assert.ok(JSON.stringify(r).indexOf('NaN') < 0, id + ' wrote NaN');
+  }
+});
+
+test('the day in words leaves out wind and temperature it does not have, and never writes NaN', () => {
+  const s = series('2026-11-04T08:00:00Z', 9);
+  delete s.temp; delete s.wind;
+  const text = W.daySummary(s, '2026-11-04', LIMERICK.lat, LIMERICK.lon, at('2026-11-04T08:00:00Z'), []);
+  assert.ok(text.indexOf('NaN') < 0, text);
+  assert.ok(text.indexOf('km/h') < 0 && text.indexOf('degrees') < 0, text);
+  const p = series('2026-11-04T08:00:00Z', 9);
+  p.temp = p.temp.slice(0, 4); p.wind = p.wind.slice(0, 4);
+  const t2 = W.daySummary(p, '2026-11-04', LIMERICK.lat, LIMERICK.lon, at('2026-11-04T08:00:00Z'), []);
+  assert.ok(t2.indexOf('NaN') < 0 && /Wind up to \d+ km\/h/.test(t2), t2);
+});
+
 test('a warning expires at the very moment of its expiry, and one more millisecond keeps it', () => {
   const w = { id: 1, headline: 'Yellow Wind Warning for Limerick', regions: ['EI07'], expiry: '2026-11-03T10:00:00Z' };
   assert.strictEqual(Wn.forCounty([w], 'Limerick', at('2026-11-03T09:59:59.999Z')).length, 1);

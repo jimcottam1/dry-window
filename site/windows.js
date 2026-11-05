@@ -128,8 +128,9 @@
     for (var i = 0; i < series.rain.length; i++) {
       out.push({
         t: t0 + i * HOUR, rain: +series.rain[i] || 0,
-        temp: series.temp ? +series.temp[i] : 10,
-        wind: series.wind ? +series.wind[i] : 0,
+        // Missing data is unknown (NaN, left out like a short array), never calm weather at 10°C.
+        temp: series.temp ? +series.temp[i] : NaN,
+        wind: series.wind ? +series.wind[i] : NaN,
         hum: series.hum && series.hum[i] != null ? +series.hum[i] : null
       });
     }
@@ -342,11 +343,14 @@
     var rain = wet.length
       ? 'rain around ' + wet.map(function (r) { return pad(r[0]) + ':00 to ' + pad(r[1]) + ':00'; }).join(', ')
       : 'dry in daylight';
-    var kmh = day.map(function (h) { return h.wind * 3.6; }), temps = day.map(function (h) { return h.temp; });
+    // Unknown hours (NaN) are left out; with none known, the sentence is left out.
+    var known = function (v) { return isFinite(v); };
+    var kmh = day.map(function (h) { return h.wind * 3.6; }).filter(known), temps = day.map(function (h) { return h.temp; }).filter(known);
     var db = dayBest(windows, dateStr), sp0 = db.length ? db[0].spans[0] : null;
     var bw = sp0 ? ' Best window ' + irishClock(sp0.startMs) + '\u2013' + irishClock(sp0.endMs) + '.' : '';
-    return label + ': ' + rain + '. Wind up to ' + Math.round(Math.max.apply(null, kmh)) + ' km/h. ' +
-      Math.round(Math.min.apply(null, temps)) + ' to ' + Math.round(Math.max.apply(null, temps)) + ' degrees.' + bw;
+    return label + ': ' + rain + '.' +
+      (kmh.length ? ' Wind up to ' + Math.round(Math.max.apply(null, kmh)) + ' km/h.' : '') +
+      (temps.length ? ' ' + Math.round(Math.min.apply(null, temps)) + ' to ' + Math.round(Math.max.apply(null, temps)) + ' degrees.' : '') + bw;
   }
 
   // First and last Irish clock hour to draw in the strip: the daylight hours of the days shown.
