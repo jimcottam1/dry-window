@@ -98,3 +98,20 @@ test('hours already past are blank cells with no pattern; the current hour is st
   const first = cells.find((c) => !c.cls.includes('na'));
   assert.ok(first.title.indexOf('12:00, rain') >= 0 && first.cls.includes('wet'));
 });
+
+test('a forecast 20 hours old is drawn with a "treat with care" note; one 40 hours old is not drawn at all', async () => {
+  const stale = await runPage(FORECAST, Date.parse('2026-11-05T01:30:00Z'));
+  assert.ok(/few hours old/.test(stale.notice.innerHTML), 'stale note');
+  assert.strictEqual(stale.app.hidden, false);
+  const dead = await runPage(FORECAST, Date.parse('2026-11-05T18:30:00Z'));
+  assert.ok(/more than a day and a half old/.test(dead.notice.innerHTML), 'dead note');
+  assert.strictEqual(dead.app.hidden, true);
+  assert.ok(!dead.strip, 'the strip was never drawn');
+});
+
+test('a town missing from the saved forecast hides the windows and says so', async () => {
+  const f = JSON.parse(FORECAST); f.towns = {};
+  const els = await runPage(JSON.stringify(f));
+  assert.strictEqual(els.app.hidden, true);
+  assert.ok(/could not load the forecast/.test(els.notice.innerHTML));
+});
