@@ -223,7 +223,15 @@
       if (a.hours !== b.hours) return b.hours - a.hours;
       return a.startMs - b.startMs;
     });
-    windows = windows.slice(0, 3);
+    // The top three, plus the best window of any day those three leave without one, so every day
+    // that has a dry window gets its frame. Still ranked best first.
+    var seen = {}, kept = [];
+    windows.forEach(function (w, n) {
+      var dates = w.spans.map(function (sp) { return irishParts(sp.startMs).date; });
+      var fresh = dates.some(function (d) { return !seen[d]; });
+      if (n < 3 || fresh) { kept.push(w); dates.forEach(function (d) { seen[d] = true; }); }
+    });
+    windows = kept;
     var best = windows[0] || null;
     var tagKey = best ? best.score : 'none';
     var wait = null;

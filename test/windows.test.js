@@ -108,6 +108,23 @@ test('clocks go back on 25 Oct 2026: the same clock time appears twice, an hour 
   assert.strictEqual(W.irishClock(Date.parse('2026-10-25T02:30:00Z')), '02:30');
 });
 
+test('mowing is not allowed at the first forecast hour, where there are no earlier hours to check', () => {
+  const s = series('2026-11-04T08:00:00Z', 9);
+  const r = W.findWindows(s, 'mow', Object.assign({}, opts, { now: Date.parse('2026-11-04T08:00:00Z') }));
+  assert.ok(r.best);
+  assert.ok(+r.best.start.slice(0, 2) >= 10, 'started at ' + r.best.start);
+});
+
+test('every day with a dry window gets a best window, even beyond the top three', () => {
+  // each day has rain at a different hour, so the five days give different windows that do not merge
+  const s = series(DAY, 120, (i) => (i % 24 === 9 + Math.floor(i / 24) ? { rain: 1 } : {}));
+  const r = W.findWindows(s, 'washing', opts);
+  ['04', '05', '06', '07', '08'].forEach((d) => {
+    assert.strictEqual(W.dayBest(r.windows, '2026-11-' + d).length, 1, 'no frame on ' + d);
+  });
+  assert.strictEqual(r.best, r.windows[0]);
+});
+
 test('windows never cross midnight Irish time', () => {
   const s = series('2026-06-20T00:00:00Z', 48);
   const r = W.findWindows(s, 'cycle', Object.assign({}, opts, { now: Date.parse('2026-06-19T22:00:00Z') }));
