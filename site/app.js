@@ -163,8 +163,8 @@
     $('strip-note').textContent = order.length && dates[0] !== order[0] ? 'Today is nearly over, so the strip starts tomorrow.' : '';
     var range = W.dayRange(dates, town.lat, town.lon), lo = range[0], hi = range[1], n = hi - lo;
     var cols = 'grid-template-columns:repeat(' + n + ',1fr)';
-    // Room for a time label such as 08:00–17:00 (about 70 px), counted in columns.
-    var labelN = W.labelCols($('strip').clientWidth || 360, window.innerWidth <= 420 ? 36 : 44, 8, n, 70);
+    // Room for a time label such as 08:00–17:00 (about 72 px, 76 allowed), counted in columns.
+    var labelN = W.labelCols($('strip').clientWidth || 360, window.innerWidth <= 420 ? 36 : 44, 8, n, W.LABEL_PX);
     var best = {}, anyFrame = false;
     dates.forEach(function (date) { best[date] = W.dayBest(res.windows, date); if (best[date].length) anyFrame = true; });
     var rows = dates.map(function (date) {
