@@ -363,7 +363,7 @@
 
   return {
     ACTIVITIES: ACTIVITIES, byId: byId, resolveActivity: resolveActivity, nextRain: nextRain,
-    daySummary: daySummary, dayRange: dayRange, frameRuns: frameRuns, dayFlags: dayFlags, frameLabel: frameLabel, dayBest: dayBest, labelCols: labelCols, labelAlign: labelAlign, debounce: debounce, hourly: hourly, findWindows: findWindows,
+    daySummary: daySummary, dayRange: dayRange, frameRuns: frameRuns, dayFlags: dayFlags, frameLabel: frameLabel, dayBest: dayBest, labelCols: labelCols, LABEL_PX: 76, labelAlign: labelAlign, debounce: debounce, hourly: hourly, findWindows: findWindows,
     irishParts: irishParts, irishClock: irishClock, daylight: daylight, HOUR: HOUR
   };
 });

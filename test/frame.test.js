@@ -259,3 +259,9 @@ test('the key sample shares the frame rule (same border and halo) and has a radi
   assert.ok(/border:\s*3px solid var\(--ink\)/.test(css), 'frame should be about 3 px');
   assert.ok(/\.k\.kframe\{[^}]*border-radius:\s*5px/.test(css), 'key sample radius');
 });
+
+test('the page allows at least 76 px for the window times (11 bold characters measure about 72 px)', () => {
+  assert.ok(W.LABEL_PX >= 76, 'LABEL_PX too small');
+  assert.ok(/W\.labelCols\(.*n, W\.LABEL_PX\)/.test(site('app.js')), 'the page does not use LABEL_PX');
+  assert.ok(W.labelCols(300, 36, 8, 12, W.LABEL_PX) >= W.labelCols(300, 36, 8, 12, 70));
+});

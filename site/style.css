@@ -2,12 +2,14 @@
   --bg:#f4f7f5; --card:#fff; --ink:#14231c; --muted:#4b5e55; --line:#cbd8d1;
   --green:#0f6b45; --green-ink:#fff; --dry:#f2c744; --light:#9ec4e6; --wet:#2f6aa8;
   --warn-bg:#fff1b8; --warn-ink:#4a3a00; --ring:#0f6b45; --night:#c3cec8;
+  --pat:rgba(20,35,28,.6); --pat-wet:rgba(255,255,255,.85);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#0f1713; --card:#17221c; --ink:#e8f0ec; --muted:#a9bbb1; --line:#2b3a32;
     --green:#58c98e; --green-ink:#07130d; --dry:#d9ae2a; --light:#4f7da6; --wet:#6aa4e0;
     --warn-bg:#3d3410; --warn-ink:#f6e7a6; --ring:#58c98e; --night:#2c3a33;
+    --pat:rgba(232,240,236,.55); --pat-wet:rgba(7,19,13,.7);
   }
 }
 *{box-sizing:border-box}
@@ -97,6 +99,10 @@ select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var
 .k.dry{background:var(--dry)}.k.light{background:var(--light)}.k.wet{background:var(--wet)}
 .k.kframe{background:var(--dry);width:22px;height:14px;vertical-align:-3px;border-radius:5px}
 .k.night{background:var(--night)}
+/* Second cue besides colour: dry plain, light rain thin diagonals, rain dense verticals, dark dots. */
+.c.light,.k.light{background-image:repeating-linear-gradient(45deg,var(--pat) 0 2px,transparent 2px 7px)}
+.c.wet,.k.wet{background-image:repeating-linear-gradient(90deg,var(--pat-wet) 0 2px,transparent 2px 5px)}
+.c.night,.k.night{background-image:radial-gradient(circle,var(--pat) 1.1px,transparent 1.6px);background-size:6px 6px}
 .sun{margin:10px 0 0;color:var(--muted)}
 
 .foot{padding-top:20px;padding-bottom:32px;font-size:.85rem;color:var(--muted)}
