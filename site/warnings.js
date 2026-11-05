@@ -137,13 +137,13 @@
   // saved time so the page can say how old it is. A live empty list is a real answer and wins.
   // deps: { fetchLive(), fetchSnapshot(), now (ms), timeoutMs }
   function loadWarnings(deps) {
-    var now = deps.now, timeoutMs = deps.timeoutMs || 8000;
+    var now = deps.now, timeoutMs = deps.timeoutMs || 8000, snapshotTimeoutMs = deps.snapshotTimeoutMs || 3000;
     var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     // Both requests get the same time limit, so a request that hangs can never leave the page waiting
     // for ever. When the live request runs out of time it is told to stop.
-    function withTimeout(p, onTimeout) {
+    function withTimeout(p, onTimeout, limit) {
       return new Promise(function (resolve, reject) {
-        var t = setTimeout(function () { if (onTimeout) onTimeout(); reject(new Error('timed out')); }, timeoutMs);
+        var t = setTimeout(function () { if (onTimeout) onTimeout(); reject(new Error('timed out')); }, limit || timeoutMs);
         Promise.resolve(p).then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
       });
     }
@@ -155,7 +155,7 @@
         return { list: live, source: 'live', fetchedAt: new Date(now).toISOString(), ageHours: 0, ageMinutes: 0, liveError: null };
       })
       .catch(function (liveErr) {
-        return Promise.resolve().then(function () { return withTimeout(deps.fetchSnapshot()); }).then(function (snap) {
+        return Promise.resolve().then(function () { return withTimeout(deps.fetchSnapshot(), null, snapshotTimeoutMs); }).then(function (snap) {
           if (!snap || !Array.isArray(snap.warnings)) throw new Error('snapshot is not usable');
           var t = Date.parse(snap.fetchedAt);
           return {
@@ -181,7 +181,7 @@
     function refresh(opts) {
       if (inflight && !(opts && opts.force)) return inflight;
       var mySeq = ++seq, now = deps.now();
-      var p = loadWarnings({ fetchLive: deps.fetchLive, fetchSnapshot: deps.fetchSnapshot, now: now, timeoutMs: deps.timeoutMs })
+      var p = loadWarnings({ fetchLive: deps.fetchLive, fetchSnapshot: deps.fetchSnapshot, now: now, timeoutMs: deps.timeoutMs, snapshotTimeoutMs: deps.snapshotTimeoutMs })
         .then(function (res) {
           if (mySeq < applied) return current;           // an older request finishing late
           if (res.source === 'live') {

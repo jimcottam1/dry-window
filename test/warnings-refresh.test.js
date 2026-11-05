@@ -147,7 +147,7 @@ test('the "none" answer leads to the met.ie/warnings message, not to "Checking..
 });
 
 test('live and snapshot both hanging: still answers, within the timeouts', async () => {
-  const { store } = makeStore({ fetchLive: never, fetchSnapshot: never, timeoutMs: 30 });
+  const { store } = makeStore({ fetchLive: never, fetchSnapshot: never, timeoutMs: 30, snapshotTimeoutMs: 30 });
   const started = Date.now();
   const r = await store.refresh();
   assert.strictEqual(r.source, 'none');
